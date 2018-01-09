@@ -97,6 +97,7 @@ def create_lungmask(file_list):
             imgs_to_process[i] = mask
         np.save(img_file.replace("images","lungmask"),imgs_to_process)
 
+
 def mask_the_images(working_path,set_name):
     """
     Here we're applying the masks and cropping and resizing the image
@@ -178,16 +179,12 @@ def mask_the_images(working_path,set_name):
         id = re.sub(r'.*_images_(.*)\.npy',r'\1',fname)
         patient_images_and_id = (out_images_per_patient,id)
         out_images.append(patient_images_and_id)
-
-     # num_images = len(out_images)
-    # final_images = np.ndarray([num_images,1,512,512],dtype=np.float32)
-    num_patients = len(out_images)
-    # final_images_and_ids = []
-    # for i in range(num_images):
-    #     final_images[i,0] = out_images[i][0]
-    #     final_images_and_ids = (final_images[i,0],out_images[i][1])
+        print ("Delete files: {} \n\t {} ".format(fname.replace("lungmask","images"),fname))
+        os.remove(fname.replace("lungmask","images")) # images of one patient
+        os.remove(fname)
 
     np.save(working_path+"{}Images.npy".format(set_name),out_images)
+
 K.set_image_dim_ordering('th')  # Theano dimension ordering in this code
 
 img_rows = 512
@@ -282,14 +279,16 @@ def get_mask_from_unet(output_path,data,set_name):
     num_patients = len(imgs_test_and_ids)
 
 
-    imgs_mask_test_and_ids = []
     for i in range(num_patients):
         num_test = len(imgs_test_and_ids[i][0])
         imgs_mask_test = np.ndarray([num_test,1,512,512],dtype=np.float32)
+        imgs_test = np.ndarray([num_test,1,512,512],dtype=np.float32)
         for j in range(num_test):
-            imgs_mask_test[j] = model.predict([imgs_test_and_ids[i][0][j]], verbose=0)[0]
-        imgs_mask_test_and_ids.append((imgs_mask_test,imgs_test_and_ids[i][1]))
-    np.save('{}masks{}Predicted.npy'.format(output_path,set_name), imgs_mask_test_and_ids)
+            imgs_test[j,0] = imgs_test_and_ids[i][0][j]
+        imgs_mask_test[i] = model.predict(imgs_test, verbose=0)[0]
+        np.save('{}{}_mask_predicted_{}.npy'.format(output_path,set_name,imgs_test_and_ids[i][1]), imgs_mask_test[i])
+        print ("Delete file: {} ".format(data))
+        os.remove(data)
 
 def getRegionFromMap(slice_npy):
     thr = np.where(slice_npy > np.mean(slice_npy),0.,1.0)
@@ -351,24 +350,25 @@ def getRegionMetricRow(fname):
                      stdEquivlentDiameter, weightedX, weightedY, numNodes, numNodesperSlice])
 
 def createFeatureDataset(nodfiles_path):
-    # dict with mapping between training examples and true labels
-    # the training set is the output masks from the unet segmentation
+    nodfiles=glob(nodfiles_path)
     print('-'*30)
     print('Create features...')
     print('-'*30)
     labels_df = pd.read_csv('/media/talhassid/My Passport/haimTal/stage1_labels.csv', index_col=0)
     numfeatures = 9
-    nodfiles = np.load(nodfiles_path) #.astype(np.float32)
     feature_array = np.zeros((len(nodfiles),numfeatures))
     truth_metric = np.zeros((len(nodfiles)))
 
     for i,nodfile in enumerate(nodfiles):
-        patID = nodfile[1]
-        truth_metric[i] = labels_df.get_value(patID, 'cancer')
-        feature_array[i] = getRegionMetricRow(nodfile[0])
+        patID = re.sub(r'.*test_mask_predicted_(\.).npy',r'\1',nodfile)
+        if patID in labels_df:
+            truth_metric[i] = labels_df.get_value(patID, 'cancer')
+        else:
+            truth_metric[i] = None
+        feature_array[i] = getRegionMetricRow(nodfile)
 
-    np.save("/media/talhassid/My Passport/haimTal/Unet/labels.npy", truth_metric)
-    np.save("/media/talhassid/My Passport/haimTal/Unet/masks.npy", feature_array)
+    np.save("/media/talhassid/My Passport/haimTal/labels.npy", truth_metric)
+    np.save("/media/talhassid/My Passport/haimTal/masks.npy", feature_array)
 
 import scipy as sp
 def logloss(act, pred):
@@ -381,8 +381,8 @@ def logloss(act, pred):
 
 
 def classifyData():
-    X = np.load("/media/talhassid/My Passport/haimTal/Unet/masks.npy")
-    Y = np.load("/media/talhassid/My Passport/haimTal/Unet/labels.npy")
+    X = np.load("/media/talhassid/My Passport/haimTal/masks.npy")
+    Y = np.load("/media/talhassid/My Passport/haimTal/labels.npy")
 
     kf = KFold(Y, n_folds=3)
     y_pred = Y * 0
@@ -422,7 +422,7 @@ def classifyData():
 """
 preprocessing the data
 """
-file_list_test=glob('/media/talhassid/My Passport/haimTal/Unet/test_images_335a834f795a4549ab818dd19090f147.npy')
+file_list_test=glob('/media/talhassid/My Passport/haimTal/test_images_335a834f795a4549ab818dd19090f147.npy')
 create_lungmask(file_list_test)
 mask_the_images('/media/talhassid/My Passport/haimTal/',"test")
 
@@ -430,8 +430,8 @@ mask_the_images('/media/talhassid/My Passport/haimTal/',"test")
 getting mask from unet
 """
 get_mask_from_unet(output_path='/media/talhassid/My Passport/haimTal/'
-                    ,data='/media/talhassid/My Passport/haimTal/testImages.npy',set_name="Test")
+                     ,data='/media/talhassid/My Passport/haimTal/testImages.npy',set_name="test")
 
-nodfiles = '/media/talhassid/My Passport/haimTal/masksTestPredicted.npy'
+nodfiles = '/media/talhassid/My Passport/haimTal/test_masks_predicted_*.npy'
 createFeatureDataset(nodfiles)
-classifyData()
+# classifyData()
