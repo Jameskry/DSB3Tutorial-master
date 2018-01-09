@@ -9,7 +9,7 @@ Loading the data
 output_path = '/media/talhassid/My Passport/haimTal/Unet/'
 
 working_path_test = '/media/talhassid/My Passport/haimTal/stage2/stage2/'
-save_data(working_path_test,"test",output_path)
+# save_data(working_path_test,"test",output_path)
 
 # working_path_train = '/media/talhassid/My Passport/haimTal/train/'
 # save_data(working_path_train,"train",output_path)
