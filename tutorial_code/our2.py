@@ -107,7 +107,7 @@ def mask_the_images(working_path,set_name):
     :return:
     """
 
-    file_list=glob('/media/talhassid/My Passport/haimTal/Unet/test_images_335a834f795a4549ab818dd19090f147.npy')
+    file_list=glob('/media/talhassid/My Passport/haimTal/test_images_0b8afe447b5f1a2c405f41cf2fb1198e.npy')
     out_images = []      #final set of images for all patients
     for fname in file_list:
         out_images_per_patient = []
@@ -179,9 +179,10 @@ def mask_the_images(working_path,set_name):
         id = re.sub(r'.*_images_(.*)\.npy',r'\1',fname)
         patient_images_and_id = (out_images_per_patient,id)
         out_images.append(patient_images_and_id)
-        print ("Delete files: {} \n\t {} ".format(fname.replace("lungmask","images"),fname))
-        os.remove(fname.replace("lungmask","images")) # images of one patient
+        print ("Delete files: {} \n\t {} ".format(fname,re.sub("lungmask","images",fname)))
         os.remove(fname)
+        os.remove(fname.replace("images","lungmask")) # images of one patient
+
 
     np.save(working_path+"{}Images.npy".format(set_name),out_images)
 
@@ -422,7 +423,7 @@ def classifyData():
 """
 preprocessing the data
 """
-file_list_test=glob('/media/talhassid/My Passport/haimTal/test_images_335a834f795a4549ab818dd19090f147.npy')
+file_list_test=glob('/media/talhassid/My Passport/haimTal/test_images_0b8afe447b5f1a2c405f41cf2fb1198e.npy')
 create_lungmask(file_list_test)
 mask_the_images('/media/talhassid/My Passport/haimTal/',"test")
 

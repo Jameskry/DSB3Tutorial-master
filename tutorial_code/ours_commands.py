@@ -7,7 +7,6 @@ from skimage.transform import resize
 import dicom  # for reading dicom files
 import SimpleITK as sitk
 from glob import glob
-import numpy as np
 from keras.models import load_model
 import pandas as pd  # just to load in the labels data and quickly reference it
 import re
@@ -28,6 +27,8 @@ from keras import backend as K
 def save_data(working_path: str, set_name: str,output_path):
     patients = os.listdir(working_path)
     for num, patient in enumerate(patients):
+        if os.path.isfile("/media/talhassid/My Passport/haimTal/Unet/{}_images_{}.npy)".format(set_name,patient)):
+            continue
         path = working_path + patient
         images = [dicom.read_file(path + '/' + s).pixel_array for s in os.listdir(path)]
         np.save("{}{}_images_{}.npy".format(output_path,set_name,patient),images)
@@ -41,7 +42,7 @@ def load_data():
 
 def create_lungmask(file_list):
     for img_file in file_list:
-        if os.path.isfile(img_file.replace("images","lungmask")):
+        if os.path.isfile(re.sub(r"(.*)images(.*)",r"\1lungmask\2",img_file)):
             continue
         # I ran into an error when using Kmean on np.float16, so I'm using np.float64 here
         imgs_to_process = np.load(img_file).astype(np.float64)
@@ -122,85 +123,85 @@ def mask_the_images(working_path,set_name):
     :return:
     """
     file_list=glob(working_path+"lungmask_*.npy")
-    out_images = []      #final set of images for all patients
+    out_images = []  #final set of images for all patients
     for fname in file_list:
         out_images_per_patient = []
         print ("working on file ", fname)
         imgs_to_process = np.load(fname.replace("lungmask","images")) # images of one patient
         masks = np.load(fname)
-        for i in range(len(imgs_to_process)):
-            mask = masks[i]
-            img = imgs_to_process[i]
-            new_size = [512,512]   # we're scaling back up to the original size of the image
-            img= mask*img          # apply lung mask
-            #
-            # renormalizing the masked image (in the mask region)
-            #
-            new_mean = np.mean(img[mask>0])
-            new_std = np.std(img[mask>0])
-            #
-            #  Pulling the background color up to the lower end
-            #  of the pixel range for the lungs
-            #
-            old_min = np.min(img)       # background color
-            img[img==old_min] = new_mean-1.2*new_std   # resetting backgound color
-            img = img-new_mean
-            img = img/new_std
-            #make image bounding box  (min row, min col, max row, max col)
-            labels = measure.label(mask)
-            regions = measure.regionprops(labels)
-            #
-            # Finding the global min and max row over all regions
-            #
-            min_row = 512
-            max_row = 0
-            min_col = 512
-            max_col = 0
-            for prop in regions:
-                B = prop.bbox
-                if min_row > B[0]:
-                    min_row = B[0]
-                if min_col > B[1]:
-                    min_col = B[1]
-                if max_row < B[2]:
-                    max_row = B[2]
-                if max_col < B[3]:
-                    max_col = B[3]
-            width = max_col-min_col
-            height = max_row - min_row
-            if width > height:
-                max_row=min_row+width
-            else:
-                max_col = min_col+height
-            #
-            # cropping the image down to the bounding box for all regions
-            # (there's probably an skimage command that can do this in one line)
-            #
-            img = img[min_row:max_row,min_col:max_col]
-            mask =  mask[min_row:max_row,min_col:max_col]
-            if max_row-min_row <5 or max_col-min_col<5:  # skipping all images with no god regions
-                pass
-            else:
-                # moving range to -1 to 1 to accomodate the resize function
-                mean = np.mean(img)
-                img = img - mean
-                min = np.min(img)
-                max = np.max(img)
-                img = img/(max-min)
-                new_img = resize(img,[512,512], mode='constant')
-                out_images_per_patient.append(new_img)
-
+        try:
+            for i in range(len(imgs_to_process)):
+                mask = masks[i]
+                img = imgs_to_process[i]
+                new_size = [512,512]   # we're scaling back up to the original size of the image
+                img= mask*img          # apply lung mask
+                #
+                # renormalizing the masked image (in the mask region)
+                #
+                new_mean = np.mean(img[mask>0])
+                new_std = np.std(img[mask>0])
+                #
+                #  Pulling the background color up to the lower end
+                #  of the pixel range for the lungs
+                #
+                old_min = np.min(img)       # background color
+                img[img==old_min] = new_mean-1.2*new_std   # resetting backgound color
+                img = img-new_mean
+                img = img/new_std
+                #make image bounding box  (min row, min col, max row, max col)
+                labels = measure.label(mask)
+                regions = measure.regionprops(labels)
+                #
+                # Finding the global min and max row over all regions
+                #
+                min_row = 512
+                max_row = 0
+                min_col = 512
+                max_col = 0
+                for prop in regions:
+                    B = prop.bbox
+                    if min_row > B[0]:
+                        min_row = B[0]
+                    if min_col > B[1]:
+                        min_col = B[1]
+                    if max_row < B[2]:
+                        max_row = B[2]
+                    if max_col < B[3]:
+                        max_col = B[3]
+                width = max_col-min_col
+                height = max_row - min_row
+                if width > height:
+                    max_row=min_row+width
+                else:
+                    max_col = min_col+height
+                #
+                # cropping the image down to the bounding box for all regions
+                # (there's probably an skimage command that can do this in one line)
+                #
+                img = img[min_row:max_row,min_col:max_col]
+                mask =  mask[min_row:max_row,min_col:max_col]
+                if max_row-min_row <5 or max_col-min_col<5:  # skipping all images with no god regions
+                    pass
+                else:
+                    # moving range to -1 to 1 to accomodate the resize function
+                    mean = np.mean(img)
+                    img = img - mean
+                    min = np.min(img)
+                    max = np.max(img)
+                    img = img/(max-min)
+                    new_img = resize(img,[512,512], mode='constant')
+                    out_images_per_patient.append(new_img)
+        except Exception as e:
+            id = re.sub(r'.*_images_(.*)\.npy',r'\1',fname)
+            print("patient {} did some troubles".format(id))
+            print('exception msg: '+ str(e))
+            continue
         id = re.sub(r'.*_images_(.*)\.npy',r'\1',fname)
         patient_images_and_id = (out_images_per_patient,id)
         out_images.append(patient_images_and_id)
-
-     # num_images = len(out_images)
-    # final_images = np.ndarray([num_images,1,512,512],dtype=np.float32)
-    num_patients = len(out_images)
-    # final_images_and_ids = []
-    # for i in range(num_images):
-    #     final_images[i,0] = out_images[i][0]
-    #     final_images_and_ids = (final_images[i,0],out_images[i][1])
+        print ("Delete files: {} \n\t {} ".format(fname,re.sub("lungmask","images",fname)))
+        os.remove(fname)
+        os.remove(re.sub(r"(.*)lungmask(.*)",r"\1images\2",fname))
 
     np.save(working_path+"{}Images.npy".format(set_name),out_images)
 
@@ -306,6 +307,8 @@ def get_mask_from_unet(output_path,data,set_name):
             imgs_test[j,0] = imgs_test_and_ids[i][0][j]
         imgs_mask_test[i] = model.predict(imgs_test, verbose=0)[0]
         np.save('{}{}_mask_predicted_{}.npy'.format(output_path,set_name,imgs_test_and_ids[i][1]), imgs_mask_test[i])
+        print ("Delete file: {} ".format(data))
+        os.remove(data)
 
 
 
@@ -381,7 +384,7 @@ def createFeatureDataset(nodfiles_path):
     truth_metric = np.zeros((len(nodfiles)))
 
     for i,nodfile in enumerate(nodfiles):
-        patID = re.sub(r'.*test_mask_predicted_(\.).npy',r'\1',nodfile)
+        patID = re.sub(r'.*_mask_predicted_(\.).npy',r'\1',nodfile)
         if patID in labels_df:
             truth_metric[i] = labels_df.get_value(patID, 'cancer')
         else:
